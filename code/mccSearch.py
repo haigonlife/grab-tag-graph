@@ -5,7 +5,12 @@ from netCDF4 import Dataset, date2num
 import numpy as np
 import numpy.ma as ma
 import os
+import pandas as pd
 from scipy import ndimage
+from bokeh.charts import Bar, output_file, show
+from bokeh.plotting import figure, output_server, show
+from bokeh.sampledata.autompg import autompg as df
+
 
 import networkx as nx
 
@@ -57,6 +62,14 @@ CLOUD_ELEMENT_GRAPH = nx.DiGraph()
 #graph meeting the CC criteria
 PRUNED_GRAPH = nx.DiGraph()
 #get lat lons from iomethods.py
+
+CLOUD_ELEMENT_COUNT = 'TotalCount'
+CLOUD_ELEMENT_ACCEPTED = 'AcceptedCount'
+CLOUD_ELEMENT_REJECTED = 'RejectedCount'
+
+countDataFrame = pd.DataFrame({ 'TotalCount' : 0.,
+                                'AcceptedCount' : 0.,
+                                'RejectedCount' : 0. })
 
 #------------------------ End GLOBAL VARS -------------------------
 #************************ Begin Functions *************************
@@ -169,12 +182,23 @@ def find_cloud_elements(mergImgs, timelist, mainStrDir, lat, lon, TRMMdirName=No
             numOfBoxes = np.count_nonzero(cloudElement)
             cloudElementArea = numOfBoxes * XRES * YRES
 
+            #updating cloud element counts here for the bar graph
+            countDataFrame.loc(CLOUD_ELEMENT_COUNT) += 1
+
+            if cloudElementArea >= AREA_MIN or (cloudElementArea < AREA_MIN and \
+                    ((ndimage.minimum(cloudElement, labels=labels)) / \
+                        float((ndimage.maximum(cloudElement, labels=labels)))) < CONVECTIVE_FRACTION):
+                CLOUD_ELEMENT_COUNT[0]+=1
+            else:
+                CLOUD_ELEMENT_COUNT[1]+=1
+
             #If the area is greater than the area required, or if the area is smaller than the suggested area,
             #check if it meets a convective fraction requirement consider as CE
 
             if cloudElementArea >= AREA_MIN or (cloudElementArea < AREA_MIN and \
                     ((ndimage.minimum(cloudElement, labels=labels)) / \
                         float((ndimage.maximum(cloudElement, labels=labels)))) < CONVECTIVE_FRACTION):
+
                 #get some time information and labeling info
                 frameceCounter += 1
                 ceUniqueID = 'F' + str(frameNum) + 'CE' + str(frameceCounter)
@@ -482,6 +506,12 @@ def find_cloud_elements(mergImgs, timelist, mainStrDir, lat, lon, TRMMdirName=No
     outAndInDeg = CLOUD_ELEMENT_GRAPH.degree_iter()
     toRemove = [node[0] for node in outAndInDeg if node[1] < 1]
     CLOUD_ELEMENT_GRAPH.remove_nodes_from(toRemove)
+   
+    p = Bar(df, 'CLOUD_ELEMENT_COUNT', values='CLOUD_ELEMENT_COUNT', title="Cloud Elements")
+
+    output_file("bar.html")
+
+    show(p)
 
     print 'number of nodes are: ', CLOUD_ELEMENT_GRAPH.number_of_nodes()
     print 'number of edges are: ', CLOUD_ELEMENT_GRAPH.number_of_edges()
